@@ -1,15 +1,15 @@
 /**
  * @brief Класс оконного фильтра НЧ
- * 
+ *
  * @file Filter.cpp
  * @author Grebenkov Alexandr
  * @date 2018-08-27
  */
 
-#include <stdint.h>
-#include <math.h>
-#include "WindowType.hpp"
 #include "WindowFilter.hpp"
+#include "WindowType.hpp"
+#include <math.h>
+#include <stdint.h>
 
 #define PI 3.14159265358979323846 // Число Пи
 
@@ -25,17 +25,29 @@ float GetHammingWindow(int i, int M)
     return 0.54f - 0.46f * cos((2 * PI * i) / M);
 }
 
+float GetTriangleWindow(int i, int M)
+{
+    if (i <= M / 2)
+        return i;
+    else
+        return M / 2 - (i - M / 2);
+}
+
+float GetRectangleWindow(int i, int M) { return 1; }
+
 /**
-   * @brief Метод подготовки коэффициентов импульсной характеристики.
-   * Необходимо выполнить перед использованием фильтра!!!
-   * 
-   * @param Fd - Частота дискретизации
-   * @param Fs - Частота среза
-   * @param M - Размер окна
-   * @param window - Тип окна (Блекмен или Хэмминг)
-   */
+ * @brief Метод подготовки коэффициентов импульсной характеристики.
+ * Необходимо выполнить перед использованием фильтра!!!
+ *
+ * @param Fd - Частота дискретизации
+ * @param Fs - Частота среза
+ * @param M - Размер окна
+ * @param window - Тип окна
+ */
 void WindowFilter::PrepareRates(float Fd, float Fs, int M, WindowType window)
 {
+    if (M % 2 == 0)
+        M--;
     H_Size = M;
     delete[] H;
     H = new float[M];
@@ -47,15 +59,37 @@ void WindowFilter::PrepareRates(float Fd, float Fs, int M, WindowType window)
     float h;
     for (int i = 0; i < M; i++)
     {
-        if (i - M / 2 == 0)
-            h = 2 * PI * Fc;
-        else
-            h = sin(2 * PI * Fc * (i - M / 2)) / (i - M / 2);
-
-        if (window == WindowType::Hamming)
+        switch (window)
+        {
+        case WindowType::Hamming:
+        {
+            if (i - M / 2 == 0)
+                h = 2 * PI * Fc;
+            else
+                h = sin(2 * PI * Fc * (i - M / 2)) / (i - M / 2);
             H[i] = h * GetHammingWindow(i, M);
-        else
+            break;
+        }
+        case WindowType::Blackman:
+        {
+            if (i - M / 2 == 0)
+                h = 2 * PI * Fc;
+            else
+                h = sin(2 * PI * Fc * (i - M / 2)) / (i - M / 2);
             H[i] = h * GetBlackmanWindow(i, M);
+            break;
+        }
+        case WindowType::Triangle:
+        {
+            H[i] = GetTriangleWindow(i, M);
+            break;
+        }
+        case WindowType::Rectangle:
+        {
+            H[i] = GetRectangleWindow(i, M);
+            break;
+        }
+        }
     }
 
     //Нормировка импульсной характеристики
@@ -67,37 +101,11 @@ void WindowFilter::PrepareRates(float Fd, float Fs, int M, WindowType window)
 }
 
 /**
-     * @brief Метод подготовки коэффициентов упрощённой
-     * импульсной характеристики.
-     * Необходимо выполнить перед использованием фильтра!!!
-     * 
-     * @param M - Размер окна (нечётное число)
-     */
-void WindowFilter::PrepareRates(int M)
-{
-    if (M % 2 == 0)
-        M--; //Для чётных чисел
-    H_Size = M;
-    delete[] H;
-    H = new float[M];
-
-    for (int i = 0; i <= M / 2; i++)
-        H[i] = H[M - i - 1] = i + 1;
-
-    //Нормировка импульсной характеристики
-    float SUM = 0;
-    for (int i = 0; i < M; i++)
-        SUM += H[i];
-    for (int i = 0; i < M; i++)
-        H[i] /= SUM; //сумма коэффициентов должна равняться 1
-}
-
-/**
-     * @brief Метод фильтрации
-     * 
-     * @param data - нефильтрованные данные
-     * @return float - фильтрованные данные
-     */
+ * @brief Метод фильтрации
+ *
+ * @param data - нефильтрованные данные
+ * @return float - фильтрованные данные
+ */
 float WindowFilter::FilterNext(float data)
 {
     if (H == nullptr) // Если нет импульсной характеристики
@@ -123,10 +131,7 @@ float WindowFilter::FilterNext(float data)
     return result;
 }
 
-void WindowFilter::Clear()
-{
-    Clear(0);
-}
+void WindowFilter::Clear() { Clear(0); }
 
 void WindowFilter::Clear(float value)
 {
